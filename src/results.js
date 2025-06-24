@@ -212,9 +212,9 @@ function renderShieldsSummary(results, context) {
 
   // Shields - only show if count > 0
   const shields = [
-    `[![Static Badge](https://raster.shields.io/badge/${total}_tests_ran_for_commit-${commit}-purple)](${summaryUrl})`,
-    ...(failed > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${failed}-failed-crimson)](${summaryUrl})`] : []),
-    ...(error > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${error}-error-red)](${summaryUrl})`] : []),
+    '',
+    ...(failed > 0  ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${failed}-failed-crimson)](${summaryUrl})`] : []),
+    ...(error > 0   ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${error}-error-red)](${summaryUrl})`] : []),
     ...(skipped > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${skipped}-skipped-yellow)](${summaryUrl})`] : []),
     ...(xfailed > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${xfailed}-xfailed-orange)](${summaryUrl})`] : []),
     ...(xpassed > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${xpassed}-xpassed-red)](${summaryUrl})`] : [])
@@ -261,6 +261,13 @@ async function postOrUpdatePrComment(results, inputs) {
   const sectionStart = `<!-- pytest-results-action run-id:${sectionId} -->`;
   const sectionEnd = `<!-- /pytest-results-action run-id:${sectionId} -->`;
   const marker = '<!-- pytest-results-action -->';
+
+  const shouldPost = results.failed.length > 0 || results.error.length > 0 || results.skipped.length > 0 || results.xfailed.length > 0 || results.xpassed.length > 0;
+  if (!shouldPost || false) {
+    console.log("No tests failed, error, skipped, xfailed, or xpassed. Skipping PR comment.");
+    return;
+  }
+
   const sectionBody = `${sectionStart}\n#### ${inputs.title} \n ${renderShieldsSummary(results, context)}\n${sectionEnd}`;
 
   // Find existing comment
@@ -277,18 +284,18 @@ async function postOrUpdatePrComment(results, inputs) {
     body = body.replace(/\s+$/, '');
     
     // Check if this run-id already exists in the comment
-    const runIdRegex = /<!-- pytest-results-action run-id:(.*?) -->[\s\S]*?<!-- \/pytest-results-action run-id:\1 -->/g;
-    const allRunIds = Array.from(body.matchAll(runIdRegex)).map(m => m[1]);
-    
-    if (!allRunIds.includes(sectionId)) {
+    if (!body.includes(sectionId) && body.includes(runId)) {
       // Append new section for this run/job after a line separator
       body = body + '\n\n---\n\n' + sectionBody;
-    } else {
+    } else if (body.includes(sectionId)) {
       // Replace the section for this run/job
       body = body.replace(
         new RegExp(`<!-- pytest-results-action run-id:${sectionId} -->[\s\S]*?<!-- \/pytest-results-action run-id:${sectionId} -->`),
         sectionBody
       );
+    }
+    else {
+      body = marker + '\n' + sectionBody;
     }
     
     await octokit.rest.issues.updateComment({
