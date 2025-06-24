@@ -221,6 +221,24 @@ function renderShieldsSummary(results, context) {
   // Sub-links
   const subLinks = `<sub>\n\n[View Full Report ↗︎](${summaryUrl})\n\n</sub>`;
 
+  // Add failed/error tests as text below shields
+  let failedErrorText = '';
+  if (failed > 0 || error > 0) {
+    failedErrorText = '\n\n**Failed/Error Tests:**\n';
+    if (failed > 0) {
+      failedErrorText += `\n**Failed (${failed}):**\n`;
+      results.failed.forEach(result => {
+        failedErrorText += `- \`${result.id}\`\n`;
+      });
+    }
+    if (error > 0) {
+      failedErrorText += `\n**Error (${error}):**\n`;
+      results.error.forEach(result => {
+        failedErrorText += `- \`${result.id}\`\n`;
+      });
+    }
+  }
+
   return `<!-- pytest-results-action -->\n\n${shields}\n\n${subLinks}\n`;
 }
 
@@ -271,9 +289,14 @@ async function postOrUpdatePrComment(results, inputs) {
   }
   const owner = context.repo.owner;
   const repo = context.repo.repo;
+  const runId = context.runId;
+  const jobName = context.job || (context.workflow ? `${context.workflow}` : "");
+  const sectionId = `${runId}${jobName ? `-${jobName}` : ''}`;
+  const sectionStart = `<!-- pytest-results-action run-id:${sectionId} -->`;
+  const sectionEnd = `<!-- /pytest-results-action run-id:${sectionId} -->`;
   const marker = '<!-- pytest-results-action -->';
   // Pass context to renderResultsMarkdown
-  const body = marker + '\n' + renderResultsMarkdown(results, inputs.title, inputs.summary, inputs.displayOptions, context);
+  const sectionBody = `${sectionStart}\n${renderResultsMarkdown(results, inputs.title, inputs.summary, inputs.displayOptions, context)}\n${sectionEnd}`;
 
   // Find existing comment
   const { data: comments } = await octokit.rest.issues.listComments({
@@ -282,7 +305,24 @@ async function postOrUpdatePrComment(results, inputs) {
     issue_number: prNumber,
   });
   const existing = comments.find(c => c.body && c.body.startsWith(marker));
+
   if (existing) {
+    let body = existing.body;
+    // Remove all whitespace at the end for clean appending
+    body = body.replace(/\s+$/, '');
+    // If the run-id changes (i.e., not found in any section), overwrite the whole comment
+    const runIdRegex = /<!-- pytest-results-action run-id:(.*?) -->[\s\S]*?<!-- \/pytest-results-action run-id:\1 -->/g;
+    const allRunIds = Array.from(body.matchAll(runIdRegex)).map(m => m[1]);
+    if (!allRunIds.includes(sectionId)) {
+      // Append new section for this run/job
+      body = body + '\n' + sectionBody;
+    } else {
+      // Replace the section for this run/job
+      body = body.replace(
+        new RegExp(`<!-- pytest-results-action run-id:${sectionId} -->[\s\S]*?<!-- \/pytest-results-action run-id:${sectionId} -->`),
+        sectionBody
+      );
+    }
     await octokit.rest.issues.updateComment({
       owner,
       repo,
@@ -290,6 +330,8 @@ async function postOrUpdatePrComment(results, inputs) {
       body,
     });
   } else {
+    // New comment
+    const body = marker + '\n' + sectionBody;
     await octokit.rest.issues.createComment({
       owner,
       repo,
