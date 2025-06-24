@@ -19,36 +19,43 @@ To be able to surface failing tests, `pytest-results-action` parses a JUnit XML 
 
 Since failing tests mean a non-zero exit code of `pytest`, `if: always()` needs to be set for `pytest-results-action` to run regardless.
 
+<picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pmeier/pytest-results-action/main/images/summary-report-dark.png">
+    <img src="https://raw.githubusercontent.com/pmeier/pytest-results-action/main/images/summary-report-light.png" alt="Example of report posted to the workflow summary by pytest-results-action. Under the title is a table that details the absolute and relative number of passed, skipped, xfailed, failed, xpassed, and errored tests. Below the table is a section for failed, errored, and xpassed tests. Each section includes the names of the respective test as well as the corresponding message. Only the details of the failed tests are visible.">
+</picture>
+
+## Example Usage
+
 ```yaml
 - name: Run tests
   run: pytest --junit-xml=test-results.xml
 
 - name: Surface failing tests
   if: always()
-  uses: pmeier/pytest-results-action@main
+  uses: taktile-org/pytest-results-action@main
   with:
-    # A list of JUnit XML files, directories containing the former, and wildcard
-    # patterns to process.
-    # See @actions/glob for supported patterns.
+    # Required: Path(s) to JUnit XML files, directories, or glob patterns
     path: test-results.xml
 
-    # (Optional) Add a summary of the results at the top of the report
+    # Optional: Add a summary of the results at the top of the report
     summary: true
 
-    # (Optional) Select which results should be included in the report.
-    # Follows the same syntax as `pytest -r`
+    # Optional: Select which results should be included in the report (pytest -r syntax)
     display-options: fEX
 
-    # (Optional) Fail the workflow if no JUnit XML was found.
+    # Optional: Fail the workflow if no JUnit XML was found
     fail-on-empty: true
 
-    # (Optional) Title of the test results section in the workflow summary
+    # Optional: Title of the test results section in the workflow summary
     title: Test results
+
+    # Optional: Post or update a comment with the results on the pull request (requires github-token)
+    comment: false
+
+    # Optional: GitHub token with 'repo' scope, required if 'comment' is true
+    github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-The report will be posted to the workflow summary:
+# Action Inputs
 
-<picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pmeier/pytest-results-action/main/images/summary-report-dark.png">
-    <img src="https://raw.githubusercontent.com/pmeier/pytest-results-action/main/images/summary-report-light.png" alt="Example of report posted to the workflow summary by pytest-results-action. Under the title is a table that details the absolute and relative number of passed, skipped, xfailed, failed, xpassed, and errored tests. Below the table is a section for failed, errored, and xpassed tests. Each section includes the names of the respective test as well as the corresponding message. Only the details of the failed tests are visible.">
-</picture>
+The following inputs are available for `
