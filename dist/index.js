@@ -33947,7 +33947,9 @@ async function extractResults(xmls) {
     testSuites = testSuites instanceof Array ? testSuites : [testSuites];
 
     for (var testSuite of testSuites) {
-      results.total_time += parseFloat(testSuite["@_time"]);
+      if (typeof testSuite["@_time"] !== "undefined") {
+        results.total_time += parseFloat(testSuite["@_time"]);
+      }
 
       var testCases = testSuite.testcase;
       if (!testCases) {
@@ -34080,46 +34082,65 @@ function addDetailsWithCodeBlock(summary, label, code) {
   );
 }
 
-async function postOrUpdatePrComment(results, inputs) {
-  const token = inputs.githubToken;
-  const octokit = github.getOctokit(token);
-  const context = github.context;
-  const prNumber = context.payload.pull_request ? context.payload.pull_request.number : (context.payload.issue ? context.payload.issue.number : null);
-  if (!prNumber) {
-    gha.warning("No pull request context found. Skipping PR comment.");
-    return;
-  }
+// Add this helper to render shields summary
+function renderShieldsSummary(results, context) {
+  // Extract info from context
   const owner = context.repo.owner;
   const repo = context.repo.repo;
-  const marker = '<!-- pytest-results-action -->';
-  const body = marker + '\n' + renderResultsMarkdown(results, inputs.title, inputs.summary, inputs.displayOptions);
+  const runId = context.runId;
+  const commit = context.sha;
+  // GitHub Actions run summary URL
+  const summaryUrl = `https://github.com/${owner}/${repo}/actions/runs/${runId}`;
 
-  // Find existing comment
-  const { data: comments } = await octokit.rest.issues.listComments({
-    owner,
-    repo,
-    issue_number: prNumber,
-  });
-  const existing = comments.find(c => c.body && c.body.startsWith(marker));
-  if (existing) {
-    await octokit.rest.issues.updateComment({
-      owner,
-      repo,
-      comment_id: existing.id,
-      body,
-    });
-  } else {
-    await octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: prNumber,
-      body,
-    });
+  // Test counts
+  const total = results.total_tests;
+  const failed = results.failed.length;
+  const error = results.error.length;
+  const skipped = results.skipped.length;
+  const xfailed = results.xfailed.length;
+  const xpassed = results.xpassed.length;
+
+  // Shields - only show if count > 0
+  const shields = [
+    `[![Static Badge](https://raster.shields.io/badge/${total}_tests-${commit}-purple)](${summaryUrl})`,
+    ...(failed > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${failed}-failed-crimson)](${summaryUrl})`] : []),
+    ...(error > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${error}-error-red)](${summaryUrl})`] : []),
+    ...(skipped > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${skipped}-skipped-yellow)](${summaryUrl})`] : []),
+    ...(xfailed > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${xfailed}-xfailed-orange)](${summaryUrl})`] : []),
+    ...(xpassed > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${xpassed}-xpassed-red)](${summaryUrl})`] : [])
+  ].join(' ');
+
+  // Sub-links
+  const subLinks = `<sub>\n\n[View Full Report ↗︎](${summaryUrl})\n\n</sub>`;
+
+  // Add failed/error tests as text below shields
+  let failedErrorText = '';
+  if (failed > 0 || error > 0) {
+    failedErrorText = '\n\n**Failed/Error Tests:**\n';
+    if (failed > 0) {
+      failedErrorText += `\n**Failed (${failed}):**\n`;
+      results.failed.forEach(result => {
+        failedErrorText += `- \`${result.id}\`\n`;
+      });
+    }
+    if (error > 0) {
+      failedErrorText += `\n**Error (${error}):**\n`;
+      results.error.forEach(result => {
+        failedErrorText += `- \`${result.id}\`\n`;
+      });
+    }
   }
+
+  return `<!-- pytest-results-action -->\n\n${shields}\n\n${subLinks}\n`;
 }
 
-function renderResultsMarkdown(results, title, summary, displayOptions) {
-  let md = `## ${title || 'Test Results'}\n`;
+function renderResultsMarkdown(results, title, summary, displayOptions, context) {
+  // Add shields summary at the top if context is provided
+  let md = '';
+  if (context) {
+    md += renderShieldsSummary(results, context) + '\n';
+  }
+  md += `## ${title || 'Test Results'}\n`;
   if (summary) {
     md += `\n${renderSummaryMarkdown(results)}\n`;
   }
@@ -34147,6 +34168,69 @@ function renderSummaryMarkdown(results) {
     md += `\n| ${emoji} ${resultType} | ${abs_amount} (${(rel_amount * 100).toFixed(1)}%) |`;
   }
   return md;
+}
+
+async function postOrUpdatePrComment(results, inputs) {
+  const token = inputs.githubToken;
+  const octokit = github.getOctokit(token);
+  const context = github.context;
+  const prNumber = context.payload.pull_request ? context.payload.pull_request.number : (context.payload.issue ? context.payload.issue.number : null);
+  if (!prNumber) {
+    gha.warning("No pull request context found. Skipping PR comment.");
+    return;
+  }
+  const owner = context.repo.owner;
+  const repo = context.repo.repo;
+  const runId = context.runId;
+  const jobName = context.job || (context.workflow ? `${context.workflow}` : "");
+  const sectionId = `${runId}${jobName ? `-${jobName}` : ''}`;
+  const sectionStart = `<!-- pytest-results-action run-id:${sectionId} -->`;
+  const sectionEnd = `<!-- /pytest-results-action run-id:${sectionId} -->`;
+  const marker = '<!-- pytest-results-action -->';
+  // Pass context to renderResultsMarkdown
+  const sectionBody = `${sectionStart}\n${renderResultsMarkdown(results, inputs.title, inputs.summary, inputs.displayOptions, context)}\n${sectionEnd}`;
+
+  // Find existing comment
+  const { data: comments } = await octokit.rest.issues.listComments({
+    owner,
+    repo,
+    issue_number: prNumber,
+  });
+  const existing = comments.find(c => c.body && c.body.startsWith(marker));
+
+  if (existing) {
+    let body = existing.body;
+    // Remove all whitespace at the end for clean appending
+    body = body.replace(/\s+$/, '');
+    // If the run-id changes (i.e., not found in any section), overwrite the whole comment
+    const runIdRegex = /<!-- pytest-results-action run-id:(.*?) -->[\s\S]*?<!-- \/pytest-results-action run-id:\1 -->/g;
+    const allRunIds = Array.from(body.matchAll(runIdRegex)).map(m => m[1]);
+    if (!allRunIds.includes(sectionId)) {
+      // Append new section for this run/job
+      body = body + '\n' + sectionBody;
+    } else {
+      // Replace the section for this run/job
+      body = body.replace(
+        new RegExp(`<!-- pytest-results-action run-id:${sectionId} -->[\s\S]*?<!-- \/pytest-results-action run-id:${sectionId} -->`),
+        sectionBody
+      );
+    }
+    await octokit.rest.issues.updateComment({
+      owner,
+      repo,
+      comment_id: existing.id,
+      body,
+    });
+  } else {
+    // New comment
+    const body = marker + '\n' + sectionBody;
+    await octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: prNumber,
+      body,
+    });
+  }
 }
 
 
