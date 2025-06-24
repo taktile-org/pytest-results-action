@@ -1,6 +1,7 @@
 const fs = require("fs").promises;
 
 const gha = require("@actions/core");
+const github = require("@actions/github");
 
 const { zip, prettyDuration } = require("./utils");
 
@@ -26,6 +27,10 @@ async function postResults(xmls, inputs) {
   const results = await extractResults(xmls);
   if (results.total_tests == 0) {
     return;
+  }
+
+  if (inputs.comment && inputs.githubToken) {
+    await postOrUpdatePrComment(results, inputs);
   }
 
   addResults(results, inputs.title, inputs.summary, inputs.displayOptions);
@@ -181,4 +186,73 @@ function addDetailsWithCodeBlock(summary, label, code) {
     label,
     "\n\n" + summary.wrap("pre", summary.wrap("code", code))
   );
+}
+
+async function postOrUpdatePrComment(results, inputs) {
+  const token = inputs.githubToken;
+  const octokit = github.getOctokit(token);
+  const context = github.context;
+  const prNumber = context.payload.pull_request ? context.payload.pull_request.number : (context.payload.issue ? context.payload.issue.number : null);
+  if (!prNumber) {
+    gha.warning("No pull request context found. Skipping PR comment.");
+    return;
+  }
+  const owner = context.repo.owner;
+  const repo = context.repo.repo;
+  const marker = '<!-- pytest-results-action -->';
+  const body = marker + '\n' + renderResultsMarkdown(results, inputs.title, inputs.summary, inputs.displayOptions);
+
+  // Find existing comment
+  const { data: comments } = await octokit.rest.issues.listComments({
+    owner,
+    repo,
+    issue_number: prNumber,
+  });
+  const existing = comments.find(c => c.body && c.body.startsWith(marker));
+  if (existing) {
+    await octokit.rest.issues.updateComment({
+      owner,
+      repo,
+      comment_id: existing.id,
+      body,
+    });
+  } else {
+    await octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: prNumber,
+      body,
+    });
+  }
+}
+
+function renderResultsMarkdown(results, title, summary, displayOptions) {
+  let md = `## ${title || 'Test Results'}\n`;
+  if (summary) {
+    md += `\n${renderSummaryMarkdown(results)}\n`;
+  }
+  for (const resultType of getResultTypesFromDisplayOptions(displayOptions)) {
+    const results_for_type = results[resultType];
+    if (!results_for_type.length) continue;
+    md += `\n### ${resultType}\n`;
+    for (const result of results_for_type) {
+      if (result.msg) {
+        md += `- \`${result.id}\` \n\n  \`\`\`\n${result.msg}\n\`\`\`\n`;
+      } else {
+        md += `- \`${result.id}\ \n`;
+      }
+    }
+  }
+  return md;
+}
+
+function renderSummaryMarkdown(results) {
+  let md = `Ran ${results.total_tests} tests in ${prettyDuration(results.total_time)}\n`;
+  md += `\n| Result | Amount |\n|--------|--------|`;
+  for (const [resultType, emoji] of resultTypesWithEmoji) {
+    const abs_amount = results[resultType].length;
+    const rel_amount = abs_amount / results.total_tests;
+    md += `\n| ${emoji} ${resultType} | ${abs_amount} (${(rel_amount * 100).toFixed(1)}%) |`;
+  }
+  return md;
 }
