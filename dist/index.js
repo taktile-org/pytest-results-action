@@ -33943,11 +33943,13 @@ async function extractResults(xmls) {
   };
 
   for await (const xml of xmls) {
-    var testSuites = xml.testsuites.testsuite;
-    testSuites = testSuites instanceof Array ? testSuites : [testSuites];
+    var testSuites = xml.testsuites && xml.testsuites.testsuite;
+    if (!testSuites) continue;
+    testSuites = Array.isArray(testSuites) ? testSuites : [testSuites];
 
     for (var testSuite of testSuites) {
-      if (typeof testSuite["@_time"] !== "undefined") {
+      if (!testSuite) continue;
+      if (Object.hasOwn(testSuite, "@_time") && testSuite["@_time"] !== undefined) {
         results.total_time += parseFloat(testSuite["@_time"]);
       }
 
@@ -34102,7 +34104,7 @@ function renderShieldsSummary(results, context) {
 
   // Shields - only show if count > 0
   const shields = [
-    `[![Static Badge](https://raster.shields.io/badge/${total}_tests-${commit}-purple)](${summaryUrl})`,
+    `[![Static Badge](https://raster.shields.io/badge/${total}_tests_ran_for_commit-${commit}-purple)](${summaryUrl})`,
     ...(failed > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${failed}-failed-crimson)](${summaryUrl})`] : []),
     ...(error > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${error}-error-red)](${summaryUrl})`] : []),
     ...(skipped > 0 ? [`&ensp; [![Static Badge](https://raster.shields.io/badge/${skipped}-skipped-yellow)](${summaryUrl})`] : []),
@@ -34134,42 +34136,6 @@ function renderShieldsSummary(results, context) {
   return `<!-- pytest-results-action -->\n\n${shields}\n\n${subLinks}\n`;
 }
 
-function renderResultsMarkdown(results, title, summary, displayOptions, context) {
-  // Add shields summary at the top if context is provided
-  let md = '';
-  if (context) {
-    md += renderShieldsSummary(results, context) + '\n';
-  }
-  md += `## ${title || 'Test Results'}\n`;
-  if (summary) {
-    md += `\n${renderSummaryMarkdown(results)}\n`;
-  }
-  for (const resultType of getResultTypesFromDisplayOptions(displayOptions)) {
-    const results_for_type = results[resultType];
-    if (!results_for_type.length) continue;
-    md += `\n### ${resultType}\n`;
-    for (const result of results_for_type) {
-      if (result.msg) {
-        md += `- \`${result.id}\` \n\n  \`\`\`\n${result.msg}\n\`\`\`\n`;
-      } else {
-        md += `- \`${result.id}\ \n`;
-      }
-    }
-  }
-  return md;
-}
-
-function renderSummaryMarkdown(results) {
-  let md = `Ran ${results.total_tests} tests in ${prettyDuration(results.total_time)}\n`;
-  md += `\n| Result | Amount |\n|--------|--------|`;
-  for (const [resultType, emoji] of resultTypesWithEmoji) {
-    const abs_amount = results[resultType].length;
-    const rel_amount = abs_amount / results.total_tests;
-    md += `\n| ${emoji} ${resultType} | ${abs_amount} (${(rel_amount * 100).toFixed(1)}%) |`;
-  }
-  return md;
-}
-
 async function postOrUpdatePrComment(results, inputs) {
   const token = inputs.githubToken;
   const octokit = github.getOctokit(token);
@@ -34187,8 +34153,7 @@ async function postOrUpdatePrComment(results, inputs) {
   const sectionStart = `<!-- pytest-results-action run-id:${sectionId} -->`;
   const sectionEnd = `<!-- /pytest-results-action run-id:${sectionId} -->`;
   const marker = '<!-- pytest-results-action -->';
-  // Pass context to renderResultsMarkdown
-  const sectionBody = `${sectionStart}\n${renderResultsMarkdown(results, inputs.title, inputs.summary, inputs.displayOptions, context)}\n${sectionEnd}`;
+  const sectionBody = `${sectionStart}\n#### ${inputs.title} \n ${renderShieldsSummary(results, context)}\n${sectionEnd}`;
 
   // Find existing comment
   const { data: comments } = await octokit.rest.issues.listComments({
@@ -34202,12 +34167,14 @@ async function postOrUpdatePrComment(results, inputs) {
     let body = existing.body;
     // Remove all whitespace at the end for clean appending
     body = body.replace(/\s+$/, '');
-    // If the run-id changes (i.e., not found in any section), overwrite the whole comment
+    
+    // Check if this run-id already exists in the comment
     const runIdRegex = /<!-- pytest-results-action run-id:(.*?) -->[\s\S]*?<!-- \/pytest-results-action run-id:\1 -->/g;
     const allRunIds = Array.from(body.matchAll(runIdRegex)).map(m => m[1]);
+    
     if (!allRunIds.includes(sectionId)) {
-      // Append new section for this run/job
-      body = body + '\n' + sectionBody;
+      // Append new section for this run/job after a line separator
+      body = body + '\n\n---\n\n' + sectionBody;
     } else {
       // Replace the section for this run/job
       body = body.replace(
@@ -34215,6 +34182,7 @@ async function postOrUpdatePrComment(results, inputs) {
         sectionBody
       );
     }
+    
     await octokit.rest.issues.updateComment({
       owner,
       repo,
