@@ -34122,13 +34122,13 @@ function renderShieldsSummary(results, context) {
     if (failed > 0) {
       failedErrorText += `\n**Failed (${failed}):**\n`;
       results.failed.forEach(result => {
-        failedErrorText += `\n<details>\n<summary>\n<strong>${result.msg}:</strong>\n</summary>\n<pre>\n<code>${result.id}</code>\n</pre>\n</details>\n`;
+        failedErrorText += `\n<details>\n<summary>\n<strong>${result.id}:</strong>\n</summary>\n<pre>\n<code>${result.msg}</code>\n</pre>\n</details>\n`;
       });
     }
     if (error > 0) {
       failedErrorText += `\n**Error (${error}):**\n`;
       results.error.forEach(result => {
-        failedErrorText += `\n<details>\n<summary>\n<strong>${result.msg}:</strong>\n</summary>\n<pre>\n<code>${result.id}</code>\n</pre>\n</details>\n`;
+        failedErrorText += `\n<details>\n<summary>\n<strong>${result.id}:</strong>\n</summary>\n<pre>\n<code>${result.msg}</code>\n</pre>\n</details>\n`;
       });
     }
   }
