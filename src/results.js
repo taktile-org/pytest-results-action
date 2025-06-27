@@ -230,18 +230,18 @@ function renderShieldsSummary(results, context) {
     if (failed > 0) {
       failedErrorText += `\n**Failed (${failed}):**\n`;
       results.failed.forEach(result => {
-        failedErrorText += `- \`${result.id}\`\n`;
+        failedErrorText += `\n<details>\n<summary>\n<strong>Failed (${result.summary}):</strong>\n</summary>\n<pre>\n<code>${result.id}</code>\n</pre>\n</details>\n`;
       });
     }
     if (error > 0) {
       failedErrorText += `\n**Error (${error}):**\n`;
       results.error.forEach(result => {
-        failedErrorText += `- \`${result.id}\`\n`;
+        failedErrorText += `\n<details>\n<summary>\n<strong>Error (${result.summary}):</strong>\n</summary>\n<pre>\n<code>${result.id}</code>\n</pre>\n</details>\n`;
       });
     }
   }
 
-  return `<!-- pytest-results-action -->\n\n${shields}\n\n${subLinks}\n`;
+  return `<!-- pytest-results-action -->\n\n${shields}\n\n${failedErrorText}\n\n${subLinks}\n`;
 }
 
 async function postOrUpdatePrComment(results, inputs) {
