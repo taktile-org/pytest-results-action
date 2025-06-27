@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="14.003" timestamp="2025-06-27T15:43:59.536218" hostname="Albertos-MacBook-Pro-3.local"><testcase classname="tests.integration.test_integration" name="test_dry_run" time="10.591"><failure message="github.GithubException.UnknownObjectException: 404 {&quot;message&quot;: &quot;Not Found&quot;, &quot;documentation_url&quot;: &quot;https://docs.github.com/rest/repos/contents#get-repository-content&quot;, &quot;status&quot;: &quot;404&quot;}">caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x109d7a140&gt;
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_dry_run(caplog):
+        caplog.set_level(logging.DEBUG)
+&gt;       await orchestrate.run(dry_run=True)
+
+tests/integration/test_integration.py:13: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+security_ticket_router/orchestrate.py:205: in run
+    await process_issues(issue, flow_rules)
+security_ticket_router/orchestrate.py:37: in process_issues
+    raise e
+security_ticket_router/orchestrate.py:34: in process_issues
+    decision = await rule(decision)
+security_ticket_router/rules_github.py:111: in __call__
+    codeowner_file = self._github_client.get_codeowners(
+security_ticket_router/github.py:40: in get_codeowners
+    codeowners = repo.get_contents(".github/CODEOWNERS")
+../../../../Library/Caches/pypoetry/virtualenvs/security-ticket-router-zJ9oVEpU-py3.10/lib/python3.10/site-packages/github/Repository.py:2171: in get_contents
+    headers, data = self._requester.requestJsonAndCheck(
+../../../../Library/Caches/pypoetry/virtualenvs/security-ticket-router-zJ9oVEpU-py3.10/lib/python3.10/site-packages/github/Requester.py:548: in requestJsonAndCheck
+    return self.__check(*self.requestJson(verb, url, parameters, headers, input, self.__customConnection(url)))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;github.Requester.Requester object at 0x109d783d0&gt;, status = 404
+responseHeaders = {'access-control-allow-origin': '*', 'access-control-expose-headers': 'ETag, Link, Location, Retry-After, X-GitHub-OTP...Hub-Request-Id, Deprecation, Sunset', 'content-encoding': 'gzip', 'content-security-policy': "default-src 'none'", ...}
+output = '{"message":"Not Found","documentation_url":"https://docs.github.com/rest/repos/contents#get-repository-content","status":"404"}'
+
+    def __check(
+        self,
+        status: int,
+        responseHeaders: Dict[str, Any],
+        output: str,
+    ) -&gt; Tuple[Dict[str, Any], Any]:
+        data = self.__structuredFromJson(output)
+        if status &gt;= 400:
+&gt;           raise self.createException(status, responseHeaders, data)
+E           github.GithubException.UnknownObjectException: 404 {"message": "Not Found", "documentation_url": "https://docs.github.com/rest/repos/contents#get-repository-content", "status": "404"}
+
+../../../../Library/Caches/pypoetry/virtualenvs/security-ticket-router-zJ9oVEpU-py3.10/lib/python3.10/site-packages/github/Requester.py:609: UnknownObjectException</failure></testcase></testsuite></testsuites>

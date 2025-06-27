@@ -5,7 +5,7 @@ const github = require("@actions/github");
 
 const { zip, prettyDuration } = require("./utils");
 
-module.exports = { postResults };
+module.exports = { postResults, extractResults, addResults, addSummary, getResultTypesFromDisplayOptions, renderShieldsSummary };
 
 // FIXME: refactor
 const resultTypes = [
